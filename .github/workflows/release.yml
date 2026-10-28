@@ -1,0 +1,70 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: coffee
+            asset_name: coffee-linux-amd64
+          # Windows 平台
+          - os: windows-latest
+            artifact_name: coffee.exe
+            asset_name: coffee-windows-amd64
+          # macOS 平台 (Intel/Apple Silicon 兼容)
+          - os: macos-latest
+            artifact_name: coffee
+            asset_name: coffee-macos-amd64
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Package Release (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/release
+          tar -czvf ../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+
+      - name: Package Release (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd target/release
+          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ..\..\${{ matrix.asset_name }}.zip
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.tar.gz
+            *.zip
+          generate_release_notes: true
