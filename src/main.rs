@@ -17,17 +17,25 @@ use std::{
 use view::CountdownView;
 
 #[derive(Parser, Debug)]
-#[command(
-    author,
-    version,
-    about = "A TUI countdown and Pomodoro timer with ASCII art"
-)]
+#[command(about = "A TUI countdown and Pomodoro timer with ASCII art")]
 struct Args {
     #[arg(short, long, default_value = "1m")]
     time: String,
     /// Start a Pomodoro session (25m work, 5m break, 15m rest).
-    #[arg(long, conflicts_with = "time")]
+    #[arg(short, long, conflicts_with = "time")]
     pomo: bool,
+    /// Show Information and enjoy a cup of Coffee.
+    #[arg(long, conflicts_with = "time", conflicts_with = "pomo")]
+    coffee: bool,
+    /// Show Version Information.
+    #[arg(
+        short,
+        long,
+        conflicts_with = "time",
+        conflicts_with = "pomo",
+        conflicts_with = "coffee"
+    )]
+    version: bool,
 }
 
 struct TerminalSession {
@@ -67,6 +75,13 @@ impl Drop for TerminalSession {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    if args.coffee || args.version {
+        information();
+        if args.coffee {
+            coffee();
+        }
+        return Ok(());
+    }
     if args.pomo {
         let mut app = App::new(Countdown::new(Duration::ZERO));
         app.start_pomodoro();
@@ -109,6 +124,44 @@ fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn information() {
+    println!("Coffee Clock - 0.1.0\nBy Muimi");
+}
+
+fn coffee() {
+    println!(
+        r#"
+Here is a cup of coffee. I wish you could enjoy it.
+
+
+                       (
+                        )     (
+                 ___...(-------)-....___
+             .-""       )    (          ""-.
+       .-'``'|-._             )         _.-|
+      /  .--.|   `""---...........---""`   |
+     /  /    |                             |
+     |  |    |                             |
+      \  \   |                             |
+       `\ `\ |                             |
+         `\ `|                             |
+         _/ /\                             /
+        (__/  \                           /
+     _..---""` \                         /`""---.._
+  .-'           \                       /          '-.
+ :               `-.__             __.-'              :
+ :                  ) ""---...---"" (                 :
+  '._               `"--...___...--"`              _.'
+    \""--..__                              __..--""/
+     '._     """----.....______.....----"""     _.'
+        `""--..,,_____            _____,,..--""`
+                      `"""----"""`
+
+             ASCII Art By Joan G. Stark (Spunk)
+"#
+    )
 }
 
 #[cfg(test)]
