@@ -19,8 +19,8 @@ use view::CountdownView;
 #[derive(Parser, Debug)]
 #[command(about = "A TUI countdown and Pomodoro timer with ASCII art")]
 struct Args {
-    #[arg(short, long, default_value = "1m")]
-    time: String,
+    #[arg(short, long, default_value = "1m", value_parser = parse_cli_duration)]
+    time: Duration,
     /// Start a Pomodoro session (25m work, 5m break, 15m rest).
     #[arg(short, long, conflicts_with = "time")]
     pomo: bool,
@@ -40,6 +40,10 @@ struct Args {
 
 struct TerminalSession {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
+}
+
+fn parse_cli_duration(input: &str) -> Result<Duration, &'static str> {
+    parse_duration(input).ok_or("use a positive duration such as 25m or 1h30m10s")
 }
 
 impl TerminalSession {
@@ -87,14 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.start_pomodoro();
         return run(app);
     }
-    let Some(duration) = parse_duration(&args.time) else {
-        println!(
-            "The time format is incorrect or set to 0. Please use a format such as \"--time 1h30m10s\"."
-        );
-        return Ok(());
-    };
-
-    run(App::new(Countdown::new(duration)))
+    run(App::new(Countdown::new(args.time)))
 }
 
 fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
@@ -127,7 +124,7 @@ fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn information() {
-    println!("Coffee Clock - 0.1.0\nBy Muimi");
+    println!("Coffee Clock - {}\nBy Muimi", env!("CARGO_PKG_VERSION"));
 }
 
 fn coffee() {
@@ -175,6 +172,6 @@ mod tests {
         assert!(Args::try_parse_from(["coffee_clock", "--pomo", "--time", "5m"]).is_err());
         let args = Args::try_parse_from(["coffee_clock", "--time", "5m"]).unwrap();
         assert!(!args.pomo);
-        assert_eq!(args.time, "5m");
+        assert_eq!(args.time, Duration::from_secs(300));
     }
 }
