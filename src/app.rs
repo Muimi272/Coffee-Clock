@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 use chrono::Local;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -6,6 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crate::{
     appearance::Appearance,
     command::{Command, CommandLine},
+    config::Settings,
     model::{Countdown, TimerState},
     pomodoro::{Phase, Pomodoro},
 };
@@ -40,6 +41,11 @@ pub struct App {
     pub message: Option<String>,
     pub message_is_error: bool,
     pub show_time: bool,
+    pub bell_enabled: bool,
+    pub config_path: Option<PathBuf>,
+    pub show_help: bool,
+    pub help_scroll: u16,
+    history: Vec<String>,
     message_remaining: Duration,
 }
 
@@ -55,21 +61,41 @@ impl App {
             message: None,
             message_is_error: false,
             show_time: false,
+            bell_enabled: true,
+            config_path: None,
+            show_help: false,
+            help_scroll: 0,
+            history: Vec::new(),
             message_remaining: Duration::ZERO,
         }
     }
 
-    pub fn tick(&mut self, elapsed: Duration) {
-        if self.pomo_mode {
-            self.pomodoro.tick(elapsed);
+    pub fn tick(&mut self, elapsed: Duration) -> bool {
+        let notification = if self.pomo_mode {
+            self.pomodoro.tick(elapsed)
         } else {
+            let running = self.countdown.state() == TimerState::Running;
             self.countdown.tick(elapsed);
-        }
+            running && self.countdown.is_finished()
+        };
         self.message_remaining = self.message_remaining.saturating_sub(elapsed);
         if self.message_remaining.is_zero() {
             self.message = None;
             self.message_is_error = false;
         }
+        if notification {
+            let message = if self.pomo_mode {
+                match self.pomodoro.phase() {
+                    Phase::Work => "Work started.",
+                    Phase::Break => "Short break started.",
+                    Phase::Rest => "Long break started.",
+                }
+            } else {
+                "Countdown finished."
+            };
+            self.feedback(Ok(message));
+        }
+        notification
     }
 
     pub fn display_text(&self) -> String {
@@ -112,6 +138,21 @@ impl App {
         if key.kind == KeyEventKind::Release {
             return false;
         }
+        if self.show_help {
+            match key.code {
+                KeyCode::Down | KeyCode::PageDown => {
+                    self.help_scroll = self.help_scroll.saturating_add(1).min(23)
+                }
+                KeyCode::Up | KeyCode::PageUp => {
+                    self.help_scroll = self.help_scroll.saturating_sub(1)
+                }
+                KeyCode::Home => self.help_scroll = 0,
+                _ => self.show_help = false,
+            }
+            if key.code != KeyCode::Char(':') {
+                return false;
+            }
+        }
         if let Some(confirmation) = &mut self.confirmation {
             match key.code {
                 KeyCode::Char('y' | 'Y') => {
@@ -141,7 +182,21 @@ impl App {
                 KeyCode::Enter => {
                     let input = line.text();
                     self.command_line = None;
+                    let trimmed = input.trim();
+                    if !trimmed.is_empty() && self.history.last().is_none_or(|last| last != trimmed)
+                    {
+                        if self.history.len() == 100 {
+                            self.history.remove(0);
+                        }
+                        self.history.push(trimmed.to_owned());
+                    }
                     return self.execute(&input);
+                }
+                KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    line.recall(&self.history, true)
+                }
+                KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    line.recall(&self.history, false)
                 }
                 KeyCode::Backspace => line.backspace(),
                 KeyCode::Delete => line.delete(),
@@ -177,6 +232,30 @@ impl App {
         };
         let result = match command {
             Command::Quit => return true,
+            Command::Help => {
+                self.show_help = true;
+                self.help_scroll = 0;
+                Ok("Help opened. Esc closes it.")
+            }
+            Command::SetBell(enabled) => {
+                self.bell_enabled = enabled;
+                Ok(if enabled {
+                    "Terminal bell enabled."
+                } else {
+                    "Terminal bell disabled."
+                })
+            }
+            Command::Save => {
+                if let Some(path) = &self.config_path {
+                    match Settings::capture(self).save(path) {
+                        Ok(()) => self.feedback(Ok("Settings saved.")),
+                        Err(error) => self.feedback(Err(&format!("Cannot save settings: {error}"))),
+                    }
+                } else {
+                    self.feedback(Err("Configuration saving is disabled."));
+                }
+                return false;
+            }
             Command::Pomo => {
                 if self.pomo_mode {
                     Ok("Already in Pomodoro mode.")
@@ -310,6 +389,69 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_history_restores_drafts_and_keeps_completion_independent() {
+        let mut app = app();
+        for command in ["stop", "time"] {
+            app.handle_key(KeyCode::Char(':').into());
+            for ch in command.chars() {
+                app.handle_key(KeyCode::Char(ch).into());
+            }
+            app.handle_key(KeyCode::Enter.into());
+        }
+        app.handle_key(KeyCode::Char(':').into());
+        app.handle_key(KeyCode::Char('r').into());
+        for (ch, expected) in [('p', "time"), ('p', "stop"), ('n', "time"), ('n', "r")] {
+            app.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::CONTROL));
+            assert_eq!(app.command_line.as_ref().unwrap().text(), expected);
+        }
+        app.handle_key(KeyCode::Down.into());
+        assert_eq!(app.command_line.as_ref().unwrap().text(), "r");
+        app.handle_key(KeyCode::Tab.into());
+        assert_eq!(app.command_line.as_ref().unwrap().text(), "restart");
+    }
+
+    #[test]
+    fn save_command_persists_settings_and_reports_disabled_or_failed_saves() {
+        let mut app = app();
+        app.execute("save");
+        assert!(app.message_is_error);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        app.config_path = Some(path.clone());
+        app.execute("set bell off");
+        app.execute("sf mini");
+        app.execute("worktime 42s");
+        app.execute("save");
+        assert!(!app.message_is_error);
+        let mut restored = self::app();
+        Settings::load(&path).unwrap().apply(&mut restored).unwrap();
+        assert!(!restored.bell_enabled);
+        assert_eq!(restored.appearance.font, crate::appearance::Font::Mini);
+        assert_eq!(
+            restored.pomodoro.duration(Phase::Work),
+            Duration::from_secs(42)
+        );
+        app.config_path = Some(dir.path().to_path_buf());
+        app.execute("save");
+        assert!(app.message_is_error);
+        assert!(app.message.as_ref().unwrap().contains("Cannot save"));
+    }
+
+    #[test]
+    fn help_keeps_timer_running_and_colon_opens_a_command_from_help() {
+        let mut app = app();
+        app.execute("help");
+        assert!(app.show_help);
+        app.tick(Duration::from_secs(2));
+        assert_eq!(app.countdown.display_text(), "00:00:58");
+        app.handle_key(KeyCode::Down.into());
+        assert!(app.help_scroll > 0);
+        app.handle_key(KeyCode::Char(':').into());
+        assert!(!app.show_help);
+        assert!(app.command_line.is_some());
+    }
 
     fn app() -> App {
         App::new(Countdown::new(Duration::from_secs(60)))

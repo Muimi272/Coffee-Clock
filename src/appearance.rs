@@ -37,6 +37,17 @@ pub enum Font {
 }
 
 impl Font {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::Small => "small",
+            Self::Big => "big",
+            Self::Slant => "slant",
+            Self::Mini => "mini",
+            Self::Banner => "banner",
+        }
+    }
+
     pub fn parse(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "standard" => Some(Self::Standard),

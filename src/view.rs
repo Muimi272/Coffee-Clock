@@ -3,8 +3,9 @@ use ratatui::{
     Frame,
     layout::{Alignment, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use std::cell::RefCell;
 
 use crate::{
     app::App,
@@ -14,7 +15,39 @@ use crate::{
 
 pub struct CountdownView {
     fonts: Vec<(Font, FIGfont)>,
+    art_cache: RefCell<ArtCache>,
 }
+
+#[derive(Default)]
+struct ArtCache {
+    text: String,
+    figures: Vec<(Font, String, usize, usize)>,
+}
+
+const HELP: &str = "COMMANDS (Esc closes, arrows scroll)\n\
+:stop / :s             Pause\n\
+:continue / :c         Start or resume\n\
+:restart / :r          Restart current timer/phase\n\
+:restart 25m           Restart countdown with new time\n\
+:countdown 25m / :cd   Set countdown, then :continue\n\
+:pomo                  Enter Pomodoro mode\n\
+:worktime 25m          Next work duration\n\
+:breaktime 5m          Next short break duration\n\
+:resttime 15m          Next long break duration\n\
+:restart work/break/rest  Restart phase, reset cycle\n\
+:time / :t             Toggle local clock\n\
+:set font mini / :sf   Choose font\n\
+:set color cyan / :sc  Choose color or #RRGGBB\n\
+:set bell on/off       Enable or disable terminal bell\n\
+:save                  Save settings for next launch\n\
+:help                  Show this help\n\
+:quit / :q             Exit\n\
+INPUT\n\
+Tab / Down: next completion; Shift-Tab / Up: previous\n\
+Ctrl-P / Ctrl-N: previous / next command history\n\
+Left/Right, Home/End: move cursor\n\
+Esc: cancel input; Enter: execute\n\
+Timers keep running while help is open.";
 
 impl CountdownView {
     pub fn new() -> Result<Self, String> {
@@ -28,7 +61,10 @@ impl CountdownView {
                     .map_err(|error| format!("Unable to load {name}: {error}"))
             })
             .collect::<Result<Vec<_>, String>>()?;
-        Ok(Self { fonts })
+        Ok(Self {
+            fonts,
+            art_cache: RefCell::default(),
+        })
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, app: &App) {
@@ -37,36 +73,22 @@ impl CountdownView {
             return;
         }
         let style = Style::default().fg(Color::Cyan);
-        frame.render_widget(
-            Paragraph::new("Coffee Clock").style(style),
-            Rect::new(area.x, area.y, area.width, 1),
-        );
-
-        let time_text = app.display_text();
-        let art = self
-            .fonts
-            .iter()
-            .find(|(font, _)| *font == app.appearance.font)
-            .and_then(|(_, font)| font.convert(&time_text))
-            .map_or_else(|| time_text.to_owned(), |figure| figure.to_string());
-        let art_height = u16::try_from(art.lines().count()).unwrap_or(u16::MAX);
-        let content_height = area.height.saturating_sub(2);
-        if content_height > 0 {
-            let offset = 1 + content_height.saturating_sub(art_height) / 2;
+        if area.height >= 3 {
             frame.render_widget(
-                Paragraph::new(art)
-                    .style(Style::default().fg(app.appearance.color))
-                    .alignment(Alignment::Center),
-                Rect::new(
-                    area.x,
-                    area.y + offset,
-                    area.width,
-                    content_height.min(art_height),
-                ),
+                Paragraph::new("Coffee Clock").style(style),
+                Rect::new(area.x, area.y, area.width, 1),
             );
         }
+        let content = if area.height >= 3 {
+            Rect::new(area.x, area.y + 1, area.width, area.height - 2)
+        } else {
+            Rect::new(area.x, area.y, area.width, 1)
+        };
+        self.render_timer(frame, content, app);
 
-        self.render_status_line(frame, area, app);
+        if area.height > 1 {
+            self.render_status_line(frame, area, app);
+        }
         if let Some(line) = &app.command_line {
             self.render_command_line(frame, area, line);
         }
@@ -89,8 +111,14 @@ impl CountdownView {
                 frame.render_widget(block, popup);
                 frame.render_widget(
                     Paragraph::new(confirmation.action.prompt())
+                        .wrap(Wrap { trim: true })
                         .style(Style::default().fg(Color::White)),
-                    Rect::new(inner.x, inner.y, inner.width, 1),
+                    Rect::new(
+                        inner.x,
+                        inner.y,
+                        inner.width,
+                        inner.height.saturating_sub(1),
+                    ),
                 );
                 if inner.height > 1 {
                     let options = if confirmation.yes {
@@ -112,6 +140,62 @@ impl CountdownView {
                 );
             }
         }
+        if app.show_help {
+            frame.render_widget(Clear, area);
+            frame.render_widget(
+                Paragraph::new(HELP)
+                    .scroll((app.help_scroll, 0))
+                    .style(Style::default().fg(Color::Cyan)),
+                area,
+            );
+        }
+    }
+
+    fn render_timer(&self, frame: &mut Frame<'_>, area: Rect, app: &App) {
+        let text = app.display_text();
+        let mut cache = self.art_cache.borrow_mut();
+        if cache.text != text {
+            cache.text = text.clone();
+            cache.figures.clear();
+        }
+        let mut figure = None;
+        for font in [app.appearance.font, Font::Small, Font::Mini] {
+            if !cache.figures.iter().any(|(name, ..)| *name == font) {
+                let art = self
+                    .fonts
+                    .iter()
+                    .find(|(name, _)| *name == font)
+                    .and_then(|(_, font)| font.convert(&text))
+                    .map_or_else(|| text.clone(), |figure| figure.to_string());
+                let width = art
+                    .lines()
+                    .map(|line| ratatui::text::Line::from(line).width())
+                    .max()
+                    .unwrap_or(0);
+                let height = art.lines().count();
+                cache.figures.push((font, art, width, height));
+            }
+            let index = cache
+                .figures
+                .iter()
+                .position(|(name, ..)| *name == font)
+                .unwrap();
+            let (_, _, width, height) = &cache.figures[index];
+            if *width <= usize::from(area.width) && *height <= usize::from(area.height) {
+                figure = Some((index, *height as u16));
+                break;
+            }
+        }
+        let (art, height) = figure.map_or((text.as_str(), 1), |(index, height)| {
+            (cache.figures[index].1.as_str(), height)
+        });
+        let y = area.y + area.height.saturating_sub(height) / 2;
+        frame.render_widget(
+            Paragraph::new(art)
+                .style(Style::default().fg(app.appearance.color))
+                .alignment(Alignment::Center),
+            Rect::new(area.x, y, area.width, height.min(area.height)),
+        );
     }
 
     fn render_status_line(&self, frame: &mut Frame<'_>, area: Rect, app: &App) {
@@ -160,6 +244,9 @@ impl CountdownView {
     fn render_command_line(&self, frame: &mut Frame<'_>, area: Rect, line: &CommandLine) {
         // Keep the title and status row visible, even while the popup is open.
         if area.height < 5 || area.width < 3 {
+            let input = Rect::new(area.x, area.bottom() - 1, area.width, 1);
+            frame.render_widget(Clear, input);
+            self.render_input(frame, input, line);
             return;
         }
         let width = area.width.min(64);
@@ -178,21 +265,7 @@ impl CountdownView {
         frame.render_widget(border, popup);
         let input_area = Rect::new(inner.x, inner.y, inner.width, 1);
 
-        let text = line.text();
-        let before_cursor: String = text.chars().take(line.cursor).collect();
-        let cursor_column = ratatui::text::Line::from(format!(":{before_cursor}")).width();
-        let scroll = cursor_column.saturating_sub(usize::from(inner.width - 1));
-        let scroll = u16::try_from(scroll).unwrap_or(u16::MAX);
-        frame.render_widget(
-            Paragraph::new(format!(":{text}"))
-                .scroll((0, scroll))
-                .style(Style::default().fg(Color::White)),
-            input_area,
-        );
-        let visible_cursor = cursor_column
-            .saturating_sub(usize::from(scroll))
-            .min(usize::from(inner.width - 1));
-        frame.set_cursor(inner.x + visible_cursor as u16, inner.y);
+        self.render_input(frame, input_area, line);
         if rows == 0 {
             return;
         }
@@ -212,6 +285,24 @@ impl CountdownView {
             );
         }
     }
+
+    fn render_input(&self, frame: &mut Frame<'_>, area: Rect, line: &CommandLine) {
+        let text = line.text();
+        let before: String = text.chars().take(line.cursor).collect();
+        let column = ratatui::text::Line::from(format!(":{before}")).width();
+        let last = usize::from(area.width.saturating_sub(1));
+        let scroll = u16::try_from(column.saturating_sub(last)).unwrap_or(u16::MAX);
+        frame.render_widget(
+            Paragraph::new(format!(":{text}"))
+                .scroll((0, scroll))
+                .style(Style::default().fg(Color::White)),
+            area,
+        );
+        frame.set_cursor(
+            area.x + column.saturating_sub(usize::from(scroll)).min(last) as u16,
+            area.y,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -221,6 +312,49 @@ mod tests {
     use crossterm::event::KeyCode;
     use ratatui::{Terminal, backend::TestBackend};
     use std::time::Duration;
+
+    #[test]
+    fn compact_layout_keeps_time_and_commands_visible_after_resizing() {
+        let view = CountdownView::new().unwrap();
+        let mut app = App::new(Countdown::new(Duration::from_secs(60)));
+        app.appearance.font = Font::Banner;
+        for (width, height, time_row) in [(12, 3, 1), (12, 2, 0), (8, 1, 0)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| view.render(frame, &app)).unwrap();
+            assert_eq!(row(&terminal, time_row).trim(), "00:01:00");
+        }
+        app.tick(Duration::from_secs(1));
+        let mut terminal = Terminal::new(TestBackend::new(12, 3)).unwrap();
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert_eq!(row(&terminal, 1).trim(), "00:00:59");
+        app.handle_key(KeyCode::Char(':').into());
+        for ch in "stop".chars() {
+            app.handle_key(KeyCode::Char(ch).into());
+        }
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert_eq!(row(&terminal, 2).trim(), ":stop");
+        app.handle_key(KeyCode::Enter.into());
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert!(row(&terminal, 2).starts_with("[Paused]"));
+    }
+
+    #[test]
+    fn help_renders_and_scrolls_without_stopping_the_timer() {
+        let view = CountdownView::new().unwrap();
+        let mut app = App::new(Countdown::new(Duration::from_secs(60)));
+        app.show_help = true;
+        let mut terminal = Terminal::new(TestBackend::new(80, 8)).unwrap();
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert!(row(&terminal, 0).contains("COMMANDS"));
+        app.help_scroll = 15;
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert!(row(&terminal, 0).contains(":save"));
+        app.handle_key(KeyCode::Esc.into());
+        app.tick(Duration::from_secs(1));
+        terminal.draw(|frame| view.render(frame, &app)).unwrap();
+        assert!(row(&terminal, 0).starts_with("Coffee Clock"));
+        assert_eq!(app.countdown.display_text(), "00:00:59");
+    }
 
     fn row(terminal: &Terminal<TestBackend>, y: u16) -> String {
         let buffer = terminal.backend().buffer();

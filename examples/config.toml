@@ -1,0 +1,8 @@
+# Save current settings from the app with :save.
+# Use this file explicitly: coffee --config examples/config.toml
+color = "cyan"
+font = "standard"
+worktime = "25m"
+breaktime = "5m"
+resttime = "15m"
+bell = true

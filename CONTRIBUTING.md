@@ -32,4 +32,4 @@ Pull requests and pushes to `master` run this workflow. The release workflow als
 3. Push the matching version tag, for example `v0.1.1` for version `0.1.1`.
 4. Check the Build and Release workflow and inspect the resulting archives.
 
-Release builds use the committed lockfile and an explicit Rust target. Each archive includes the executable, README, user documentation, and the project and font licenses. Only the publication job has permission to write repository contents.
+Release builds use the committed lockfile and an explicit Rust target. A version tag must match `Cargo.toml`. Each archive includes the executable, README, changelog, sample configuration, user documentation, and the project and font licenses. Releases also include `SHA256SUMS` for the archives. Only the publication job has permission to write repository contents.

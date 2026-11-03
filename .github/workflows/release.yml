@@ -9,13 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    name: Check version tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Match tag to Cargo version
+        run: >-
+          python3 -c 'import os, tomllib; version = tomllib.load(open("Cargo.toml", "rb"))["package"]["version"]; assert os.environ["GITHUB_REF_NAME"] == "v" + version, "Tag must match Cargo.toml version"'
+
   validate:
     name: Validate
     uses: ./.github/workflows/ci.yml
 
   build:
     name: Build (${{ matrix.target }})
-    needs: validate
+    needs: [version, validate]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -64,22 +73,44 @@ jobs:
       - name: Package Release (Linux / macOS)
         if: matrix.os != 'windows-latest'
         run: |
-          mkdir -p package/docs package/assets/fonts
+          mkdir -p package/docs package/assets/fonts package/examples
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
-          cp README.md LICENSE CONTRIBUTING.md package/
+          cp README.md LICENSE CONTRIBUTING.md CHANGELOG.md package/
           cp docs/RELEASE.md docs/README.zh-CN.md package/docs/
           cp assets/fonts/LICENSE package/assets/fonts/
+          cp examples/config.toml package/examples/
           tar -czf ${{ matrix.asset_name }}.tar.gz -C package .
 
       - name: Package Release (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          New-Item -ItemType Directory -Force -Path package/docs, package/assets/fonts
+          New-Item -ItemType Directory -Force -Path package/docs, package/assets/fonts, package/examples
           Copy-Item target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
-          Copy-Item README.md, LICENSE, CONTRIBUTING.md package/
+          Copy-Item README.md, LICENSE, CONTRIBUTING.md, CHANGELOG.md package/
           Copy-Item docs/RELEASE.md, docs/README.zh-CN.md package/docs/
           Copy-Item assets/fonts/LICENSE package/assets/fonts/
+          Copy-Item examples/config.toml package/examples/
           Compress-Archive -Path package/* -DestinationPath ${{ matrix.asset_name }}.zip
+
+      - name: Verify archive (Linux / macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir smoke
+          tar -xzf ${{ matrix.asset_name }}.tar.gz -C smoke
+          for file in LICENSE assets/fonts/LICENSE docs/RELEASE.md docs/README.zh-CN.md examples/config.toml CHANGELOG.md; do
+            test -s "smoke/$file"
+          done
+          ./smoke/coffee --version
+
+      - name: Verify archive (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Expand-Archive -LiteralPath ${{ matrix.asset_name }}.zip -DestinationPath smoke
+          foreach ($file in @('LICENSE', 'assets/fonts/LICENSE', 'docs/RELEASE.md', 'docs/README.zh-CN.md', 'examples/config.toml', 'CHANGELOG.md')) {
+            if (!(Test-Path -LiteralPath "smoke/$file")) { throw "Missing archive file: $file" }
+          }
+          ./smoke/coffee.exe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged executable failed' }
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
@@ -105,6 +136,10 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Generate archive checksums
+        working-directory: artifacts
+        run: sha256sum -- *.tar.gz *.zip > SHA256SUMS
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3

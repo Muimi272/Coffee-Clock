@@ -46,8 +46,15 @@ cargo build --release
 | `restart work`、`restart break`、`restart rest` | 立即重启指定番茄阶段并重置循环计数 |
 | `set color cyan`、`sc #12ABEF` | 设置艺术字颜色 |
 | `set font slant`、`sf mini` | 设置艺术字字体 |
+| `help` | 显示命令帮助；方向键滚动，Esc 关闭 |
+| `set bell on`、`set bell off` | 开启或关闭终端响铃 |
+| `save` | 保存外观、番茄阶段时长和响铃设置 |
 
 命令反馈在标题栏右侧显示，数秒后自动消失。进入命令栏或切换到系统时间不会暂停计时。倒计时结束后显示 `00:00:00`；如需再次计时，请重新开始或设置新时长。
+
+命令栏中可用 Ctrl-P / Ctrl-N 浏览本次运行的最近 100 条命令，回到最新记录之后会恢复输入草稿；上下方向键仍用于补全。`:help` 显示命令帮助，帮助打开时计时仍继续。
+
+倒计时结束或番茄阶段切换时，会显示提示并触发终端响铃。响铃是否发声取决于终端设置；可用 `--no-bell` 启动参数或 `:set bell off` 关闭。一次延迟更新跨过多个阶段时，只针对最新阶段提醒一次。
 
 ## 番茄钟
 
@@ -59,9 +66,17 @@ cargo build --release
 
 ## 外观
 
-内置艺术字字体为 `standard`（默认）、`small`、`big`、`slant`、`mini` 和 `banner`。支持常见终端颜色名称（如 `cyan`、`orange`、`purple`、`pink`）以及 `#RRGGBB`、`#RGB` 格式的 HEX 颜色。颜色名和字体名不区分大小写；颜色效果取决于终端的色彩支持。宽体艺术字需要更宽的终端窗口。外观设置只对当前程序运行有效。
+内置艺术字字体为 `standard`（默认）、`small`、`big`、`slant`、`mini` 和 `banner`。支持常见终端颜色名称（如 `cyan`、`orange`、`purple`、`pink`）以及 `#RRGGBB`、`#RGB` 格式的 HEX 颜色。颜色名和字体名不区分大小写；颜色效果取决于终端的色彩支持。窗口不足时依次尝试 `small`、`mini` 和普通数字，扩大窗口后恢复所选字体；较矮窗口使用紧凑命令栏。
 
 字体资源源自 FIGlet 2.2.5 的 `cmatsuoka/figlet` 字体，并随项目分发；许可信息见 [`assets/fonts/LICENSE`](assets/fonts/LICENSE)。字体内容内嵌在可执行文件中，无需运行时下载。
+
+## 保存设置
+
+执行 `:save` 保存颜色、字体、三种番茄阶段时长和响铃设置，下次启动时自动读取。当前倒计时和命令历史只在本次运行中保留。配置在界面启动前校验，保存时原子替换文件。
+
+默认位置：Windows 为 `%APPDATA%\coffee-clock\config\config.toml`，Linux 为 `~/.config/coffee-clock/config.toml`（设置 `$XDG_CONFIG_HOME` 时使用该目录），macOS 为 `~/Library/Application Support/coffee-clock/config.toml`。可用 `--config 路径` 指定其他文件；文件不存在时先使用默认值，执行 `:save` 后创建。`--no-config` 忽略配置并禁用保存。`--no-bell` 覆盖本次运行的响铃设置；之后若执行 `:save`，会一并保存该覆盖值。
+
+完整配置示例见 [examples/config.toml](../examples/config.toml)，版本变化见 [CHANGELOG.md](../CHANGELOG.md)。
 
 ## 开发与验证
 
@@ -78,6 +93,7 @@ GitHub Actions 会在拉取请求和推送至 `master` 时，对 Linux、Windows
 - `src/main.rs`：命令行参数、终端生命周期及事件循环。
 - `src/app.rs`：应用状态、键盘事件和命令执行。
 - `src/command.rs`：命令解析、输入编辑和自动补全。
+- `src/config.rs`：配置校验、读取和原子保存。
 - `src/model.rs`：倒计时状态及时间格式解析。
 - `src/pomodoro.rs`：工作与休息阶段的循环计时。
 - `src/appearance.rs`：颜色解析、字体及外观配置。
