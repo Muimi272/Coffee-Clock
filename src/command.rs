@@ -27,6 +27,9 @@ pub const COMMANDS: &[&str] = &[
     "worktime",
     "breaktime",
     "resttime",
+    "help",
+    "save",
+    "set bell",
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -42,6 +45,9 @@ pub enum Command {
     SetColor(ratatui::style::Color),
     SetFont(Font),
     Time,
+    Help,
+    Save,
+    SetBell(bool),
 }
 
 impl Command {
@@ -53,7 +59,8 @@ impl Command {
             name = match words.next() {
                 Some("color") => "sc",
                 Some("font") => "sf",
-                _ => return Err("Usage: set color <color> or set font <font>"),
+                Some("bell") => "bell",
+                _ => return Err("Usage: set color <color>, set font <font>, or set bell on/off"),
             };
         }
         let argument = words.next();
@@ -67,6 +74,11 @@ impl Command {
                 Ok(Self::RestartPhase(Phase::parse(phase).unwrap()))
             }
             ("pomo", None) => Ok(Self::Pomo),
+            ("help", None) => Ok(Self::Help),
+            ("save", None) => Ok(Self::Save),
+            ("bell", Some("on")) => Ok(Self::SetBell(true)),
+            ("bell", Some("off")) => Ok(Self::SetBell(false)),
+            ("bell", _) => Err("Usage: set bell on/off"),
             ("worktime" | "breaktime" | "resttime", Some(time)) => {
                 let phase = match name {
                     "worktime" => Phase::Work,
@@ -98,9 +110,11 @@ impl Command {
             ("sc", None) => Err("Usage: set color <color> or sc <color>"),
             ("sf", None) => Err("Usage: set font <font> or sf <font>"),
             ("t" | "time", None) => Ok(Self::Time),
-            ("q" | "quit" | "s" | "stop" | "c" | "continue" | "t" | "time" | "pomo", Some(_)) => {
-                Err("This command takes no arguments.")
-            }
+            (
+                "q" | "quit" | "s" | "stop" | "c" | "continue" | "t" | "time" | "pomo" | "help"
+                | "save",
+                Some(_),
+            ) => Err("This command takes no arguments."),
             _ => Err("Unknown command. Press Tab to complete a command."),
         }
     }
@@ -111,6 +125,8 @@ pub struct CommandLine {
     buffer: Vec<char>,
     pub cursor: usize,
     completion: Option<(Vec<String>, usize)>,
+    history_index: Option<usize>,
+    history_draft: String,
 }
 
 impl CommandLine {
@@ -119,12 +135,14 @@ impl CommandLine {
     }
 
     pub fn insert(&mut self, character: char) {
+        self.history_index = None;
         self.buffer.insert(self.cursor, character);
         self.cursor += 1;
         self.completion = None;
     }
 
     pub fn backspace(&mut self) {
+        self.history_index = None;
         if self.cursor > 0 {
             self.cursor -= 1;
             self.buffer.remove(self.cursor);
@@ -133,6 +151,7 @@ impl CommandLine {
     }
 
     pub fn delete(&mut self) {
+        self.history_index = None;
         if self.cursor < self.buffer.len() {
             self.buffer.remove(self.cursor);
         }
@@ -173,6 +192,7 @@ impl CommandLine {
             ("sc ", COLOR_NAMES),
             ("set font ", FONT_NAMES),
             ("sf ", FONT_NAMES),
+            ("set bell ", &["on", "off"][..]),
             ("restart ", &["work", "break", "rest"][..]),
             ("r ", &["work", "break", "rest"][..]),
         ] {
@@ -196,6 +216,7 @@ impl CommandLine {
     }
 
     pub fn complete(&mut self, reverse: bool) {
+        self.history_index = None;
         if let Some((candidates, index)) = &mut self.completion {
             *index = if reverse {
                 (*index + candidates.len() - 1) % candidates.len()
@@ -213,6 +234,36 @@ impl CommandLine {
             self.completion = Some((candidates, index));
         }
         self.cursor = self.buffer.len();
+    }
+
+    pub fn recall(&mut self, history: &[String], previous: bool) {
+        if history.is_empty() {
+            return;
+        }
+        let index = if previous {
+            match self.history_index {
+                Some(index) => index.saturating_sub(1),
+                None => {
+                    self.history_draft = self.text();
+                    history.len() - 1
+                }
+            }
+        } else {
+            match self.history_index {
+                Some(index) => index + 1,
+                None => return,
+            }
+        };
+        let text = if index < history.len() {
+            self.history_index = Some(index);
+            &history[index]
+        } else {
+            self.history_index = None;
+            &self.history_draft
+        };
+        self.buffer = text.chars().collect();
+        self.cursor = self.buffer.len();
+        self.completion = None;
     }
 }
 

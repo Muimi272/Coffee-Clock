@@ -1,6 +1,7 @@
 mod app;
 mod appearance;
 mod command;
+mod config;
 mod model;
 mod pomodoro;
 mod view;
@@ -11,7 +12,8 @@ use crossterm::event::{self, Event};
 use model::{Countdown, parse_duration};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{
-    io,
+    io::{self, IsTerminal, Write},
+    path::PathBuf,
     time::{Duration, Instant},
 };
 use view::CountdownView;
@@ -36,6 +38,15 @@ struct Args {
         conflicts_with = "coffee"
     )]
     version: bool,
+    /// Use a specific settings file (saved with :save).
+    #[arg(long, conflicts_with = "no_config")]
+    config: Option<PathBuf>,
+    /// Ignore saved settings and disable :save.
+    #[arg(long)]
+    no_config: bool,
+    /// Disable the terminal bell for this session.
+    #[arg(long)]
+    no_bell: bool,
 }
 
 struct TerminalSession {
@@ -86,15 +97,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    if args.pomo {
-        let mut app = App::new(Countdown::new(Duration::ZERO));
-        app.start_pomodoro();
-        return run(app);
+    let mut app = App::new(Countdown::new(args.time));
+    if !args.no_config {
+        app.config_path = args.config.or_else(config::default_path);
+        if let Some(path) = &app.config_path {
+            let settings = config::Settings::load(path)
+                .map_err(|error| format!("Cannot load {}: {error}", path.display()))?;
+            settings
+                .apply(&mut app)
+                .map_err(|error| format!("Invalid configuration: {error}"))?;
+        }
     }
-    run(App::new(Countdown::new(args.time)))
+    if args.no_bell {
+        app.bell_enabled = false;
+    }
+    if args.pomo {
+        app.start_pomodoro();
+    }
+    run(app)
 }
 
 fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err("Coffee Clock requires an interactive terminal".into());
+    }
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(
+            io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen,
+            crossterm::cursor::Show
+        );
+        previous_hook(info);
+    }));
     let view = CountdownView::new()?;
     let mut session = TerminalSession::new()?;
     let tick_rate = Duration::from_millis(200);
@@ -102,7 +138,11 @@ fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let now = Instant::now();
-        app.tick(now.duration_since(last_update));
+        tick(
+            &mut app,
+            now.duration_since(last_update),
+            session.terminal.backend_mut(),
+        )?;
         last_update = now;
         session.terminal.draw(|frame| view.render(frame, &app))?;
 
@@ -110,7 +150,11 @@ fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
             let event = event::read()?;
             // Attribute all time before a command to the previous timer state.
             let now = Instant::now();
-            app.tick(now.duration_since(last_update));
+            tick(
+                &mut app,
+                now.duration_since(last_update),
+                session.terminal.backend_mut(),
+            )?;
             last_update = now;
             if let Event::Key(key) = event
                 && app.handle_key(key)
@@ -120,6 +164,14 @@ fn run(mut app: App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    Ok(())
+}
+
+fn tick(app: &mut App, elapsed: Duration, output: &mut impl Write) -> io::Result<()> {
+    if app.tick(elapsed) && app.bell_enabled {
+        output.write_all(b"\x07")?;
+        output.flush()?;
+    }
     Ok(())
 }
 
@@ -164,6 +216,38 @@ Here is a cup of coffee. I wish you could enjoy it.
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bell_fires_once_on_completion_and_respects_pause_and_mute() {
+        let mut app = App::new(Countdown::new(Duration::from_secs(1)));
+        let mut output = Vec::new();
+        tick(&mut app, Duration::from_millis(500), &mut output).unwrap();
+        assert!(output.is_empty());
+        app.countdown.stop().unwrap();
+        tick(&mut app, Duration::from_secs(10), &mut output).unwrap();
+        assert!(output.is_empty());
+        app.countdown.resume().unwrap();
+        tick(&mut app, Duration::from_millis(500), &mut output).unwrap();
+        tick(&mut app, Duration::from_secs(1), &mut output).unwrap();
+        assert_eq!(output, b"\x07");
+        assert_eq!(app.message.as_deref(), Some("Countdown finished."));
+        app.countdown.restart(None);
+        app.bell_enabled = false;
+        tick(&mut app, Duration::from_secs(1), &mut output).unwrap();
+        assert_eq!(output, b"\x07");
+    }
+
+    #[test]
+    fn delayed_pomodoro_ticks_coalesce_alerts_even_when_returning_to_the_same_phase() {
+        let mut app = App::new(Countdown::new(Duration::ZERO));
+        app.start_pomodoro();
+        let mut output = Vec::new();
+        tick(&mut app, Duration::from_secs(7800), &mut output).unwrap();
+        assert_eq!(output, b"\x07");
+        assert_eq!(app.message.as_deref(), Some("Work started."));
+        tick(&mut app, Duration::ZERO, &mut output).unwrap();
+        assert_eq!(output, b"\x07");
+    }
 
     #[test]
     fn pomodoro_startup_and_explicit_time_are_mutually_exclusive() {

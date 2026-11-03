@@ -83,7 +83,7 @@ impl Pomodoro {
         Ok(())
     }
 
-    fn duration(&self, phase: Phase) -> Duration {
+    pub fn duration(&self, phase: Phase) -> Duration {
         match phase {
             Phase::Work => self.worktime,
             Phase::Break => self.breaktime,
@@ -101,11 +101,13 @@ impl Pomodoro {
         self.timer.restart(Some(self.duration(phase)));
     }
 
-    pub fn tick(&mut self, mut elapsed: Duration) {
+    pub fn tick(&mut self, mut elapsed: Duration) -> bool {
         if self.timer.state() != TimerState::Running {
-            return;
+            return false;
         }
+        let mut transitioned = false;
         while elapsed >= self.timer.remaining() {
+            transitioned = true;
             elapsed -= self.timer.remaining();
             let next = match self.phase {
                 Phase::Work => {
@@ -144,6 +146,7 @@ impl Pomodoro {
             }
         }
         self.timer.tick(elapsed);
+        transitioned
     }
 }
 
