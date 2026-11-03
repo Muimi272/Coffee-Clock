@@ -88,15 +88,22 @@ impl App {
         self.show_time = false;
     }
 
-    pub fn status(&self) -> &'static str {
-        if self.pomo_mode {
-            return self.pomodoro.phase().label();
-        }
-        match self.countdown.state() {
+    pub fn status(&self) -> String {
+        let state = if self.pomo_mode {
+            self.pomodoro.state()
+        } else {
+            self.countdown.state()
+        };
+        let label = match state {
             TimerState::Running => "Running",
             TimerState::Paused => "Paused",
             TimerState::Ready => "Ready",
             TimerState::Finished => "Finished",
+        };
+        if self.pomo_mode {
+            format!("{} | {label}", self.pomodoro.phase().label())
+        } else {
+            label.to_owned()
         }
     }
 
@@ -435,7 +442,7 @@ mod tests {
         app.execute("pomo");
         app.handle_key(KeyCode::Char('y').into());
         assert!(app.pomo_mode);
-        assert_eq!(app.status(), "Work");
+        assert_eq!(app.status(), "Work | Running");
         assert_eq!(app.display_text(), "00:25:00");
         app.execute("countdown 2m");
         app.handle_key(KeyCode::Esc.into());
@@ -471,19 +478,19 @@ mod tests {
         app.execute("time");
         app.tick(Duration::from_secs(2));
         app.execute("t");
-        assert_eq!(app.status(), "Break");
+        assert_eq!(app.status(), "Break | Running");
         assert_eq!(app.display_text(), "00:00:03");
         app.execute("restart rest");
-        assert_eq!(app.status(), "Rest");
+        assert_eq!(app.status(), "Rest | Running");
         assert_eq!(app.display_text(), "00:00:04");
         app.execute("restart break");
         app.tick(Duration::from_secs(3));
-        assert_eq!(app.status(), "Work");
+        assert_eq!(app.status(), "Work | Running");
         app.tick(Duration::from_secs(2));
-        assert_eq!(app.status(), "Break");
+        assert_eq!(app.status(), "Break | Running");
         app.execute("restart 1m");
         assert!(app.message_is_error);
-        assert_eq!(app.status(), "Break");
+        assert_eq!(app.status(), "Break | Running");
     }
 
     #[test]

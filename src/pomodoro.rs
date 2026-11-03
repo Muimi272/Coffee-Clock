@@ -55,6 +55,11 @@ impl Pomodoro {
     pub fn phase(&self) -> Phase {
         self.phase
     }
+
+    pub fn state(&self) -> TimerState {
+        self.timer.state()
+    }
+
     pub fn display_text(&self) -> String {
         self.timer.display_text()
     }
