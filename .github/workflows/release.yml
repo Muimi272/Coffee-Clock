@@ -6,63 +6,86 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  validate:
+    name: Validate
+    uses: ./.github/workflows/ci.yml
+
   build:
-    name: Build
+    name: Build (${{ matrix.target }})
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             artifact_name: coffee
             asset_name: coffee-linux-amd64
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
             artifact_name: coffee.exe
             asset_name: coffee-windows-amd64
-          - os: macos-latest
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
             artifact_name: coffee
             asset_name: coffee-macos-amd64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            artifact_name: coffee
+            asset_name: coffee-macos-arm64
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
 
       - name: Build Release
-        run: cargo build --release
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package Release (Linux / macOS)
         if: matrix.os != 'windows-latest'
         run: |
-          cd target/release
-          tar -czvf ../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+          mkdir -p package/docs package/assets/fonts
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
+          cp README.md LICENSE CONTRIBUTING.md package/
+          cp docs/RELEASE.md docs/README.zh-CN.md package/docs/
+          cp assets/fonts/LICENSE package/assets/fonts/
+          tar -czf ${{ matrix.asset_name }}.tar.gz -C package .
 
       - name: Package Release (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          cd target/release
-          Compress-Archive -Path ${{ matrix.artifact_name }} -DestinationPath ..\..\${{ matrix.asset_name }}.zip
+          New-Item -ItemType Directory -Force -Path package/docs, package/assets/fonts
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package/
+          Copy-Item README.md, LICENSE, CONTRIBUTING.md package/
+          Copy-Item docs/RELEASE.md, docs/README.zh-CN.md package/docs/
+          Copy-Item assets/fonts/LICENSE package/assets/fonts/
+          Compress-Archive -Path package/* -DestinationPath ${{ matrix.asset_name }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset_name }}
+          if-no-files-found: error
           path: |
             *.tar.gz
             *.zip
@@ -71,16 +94,22 @@ jobs:
     name: Publish Release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
+          fail_on_unmatched_files: true
           body_path: docs/RELEASE.md
-          generate_release_notes: False
+          generate_release_notes: false

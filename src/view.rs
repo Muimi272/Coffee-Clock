@@ -329,13 +329,43 @@ mod tests {
         assert!(!app.pomo_mode);
         app.start_pomodoro();
         terminal.draw(|frame| view.render(frame, &app)).unwrap();
-        assert!(row(&terminal, 23).starts_with("[Work]"));
+        assert!(row(&terminal, 23).starts_with("[Work | Running]"));
         app.tick(Duration::from_secs(1500));
         terminal.draw(|frame| view.render(frame, &app)).unwrap();
-        assert!(row(&terminal, 23).starts_with("[Break]"));
+        assert!(row(&terminal, 23).starts_with("[Break | Running]"));
         app.tick(Duration::from_secs(5700));
         terminal.draw(|frame| view.render(frame, &app)).unwrap();
-        assert!(row(&terminal, 23).starts_with("[Rest]"));
+        assert!(row(&terminal, 23).starts_with("[Rest | Running]"));
+    }
+
+    #[test]
+    fn pomodoro_pause_stays_visible_after_feedback_expires_in_every_phase() {
+        use crate::pomodoro::Phase;
+
+        let view = CountdownView::new().unwrap();
+        let mut app = App::new(Countdown::new(Duration::ZERO));
+        app.start_pomodoro();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+
+        for phase in [Phase::Work, Phase::Break, Phase::Rest] {
+            app.pomodoro.restart(phase);
+            for command in ["stop", "continue"] {
+                app.handle_key(KeyCode::Char(':').into());
+                for ch in command.chars() {
+                    app.handle_key(KeyCode::Char(ch).into());
+                }
+                app.handle_key(KeyCode::Enter.into());
+                app.tick(Duration::from_secs(5));
+                assert!(app.message.is_none());
+                terminal.draw(|frame| view.render(frame, &app)).unwrap();
+                let state = if command == "stop" {
+                    "Paused"
+                } else {
+                    "Running"
+                };
+                assert!(row(&terminal, 23).starts_with(&format!("[{} | {state}]", phase.label())));
+            }
+        }
     }
 
     #[test]
