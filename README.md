@@ -48,8 +48,13 @@ Press `:` to open the command bar. Press Enter to execute a command or Esc to ca
 | `restart work`, `restart break`, `restart rest` | Restart the specified Pomodoro phase and reset the cycle count |
 | `set color cyan`, `sc #12ABEF` | Set the FIGlet display color |
 | `set font slant`, `sf mini` | Set the FIGlet font |
+| `help` | Open command help; arrows scroll, Esc closes |
+| `set bell on`, `set bell off` | Enable or disable the terminal bell |
+| `save` | Save current appearance, phase durations, and bell setting |
 
-Command feedback appears at the right side of the title row and disappears after a few seconds. Opening the command bar or showing the system clock does not pause the timer. A finished countdown displays `00:00:00`; restart it or set a new duration to count again.
+Command feedback appears at the right side of the title row and disappears after a few seconds. Opening the command bar, help, or the system clock does not pause the timer. A finished countdown displays `00:00:00`; restart it or set a new duration to count again. In the command bar, Ctrl-P / Ctrl-N browse up to 100 commands from this session and restore your draft when returning past the latest command. Up / Down retain their completion behavior.
+
+Countdown completion and Pomodoro transitions produce a terminal bell and visible feedback. Terminal settings determine whether the bell is audible. Use `--no-bell` at startup or `:set bell off` to disable it; delayed ticks spanning multiple phases produce one alert for the latest phase.
 
 ## Pomodoro Timer
 
@@ -61,9 +66,17 @@ While the app is running, use `:pomo` to switch from a regular countdown to Pomo
 
 ## Appearance
 
-Built-in FIGlet fonts are `standard` (default), `small`, `big`, `slant`, `mini`, and `banner`. Colors can be specified by common terminal color names (such as `cyan`, `orange`, `purple`, and `pink`) or HEX values in `#RRGGBB` and `#RGB` formats. Color and font names are case-insensitive. Color rendering depends on terminal support, and wider fonts may require a wider terminal window. Appearance settings last for the current session only.
+Built-in FIGlet fonts are `standard` (default), `small`, `big`, `slant`, `mini`, and `banner`. Colors can be specified by common terminal color names (such as `cyan`, `orange`, `purple`, and `pink`) or HEX values in `#RRGGBB` and `#RGB` formats. Color and font names are case-insensitive. Color rendering depends on terminal support. If the selected font does not fit, the display tries `small`, then `mini`, then plain digits; enlarging the window restores the selected font. Short windows use a compact command line.
 
 Bundled fonts originate from the FIGlet 2.2.5 fonts in the `cmatsuoka/figlet` repository. See [`assets/fonts/LICENSE`](assets/fonts/LICENSE) for their license. Font data is embedded in the executable.
+
+## Saved Settings
+
+Use `:save` to persist the current color, font, three Pomodoro durations, and bell setting. Settings load on the next launch; active countdowns and command history stay within the current session. Configuration files are validated before starting the terminal UI and replaced atomically when saved.
+
+The default file is `%APPDATA%\coffee-clock\config\config.toml` on Windows, `~/.config/coffee-clock/config.toml` on Linux (or `$XDG_CONFIG_HOME/coffee-clock/config.toml`), and `~/Library/Application Support/coffee-clock/config.toml` on macOS. Use `--config path/to/config.toml` for another location. A missing file uses defaults until you save; `--no-config` ignores settings and disables saving. `--no-bell` overrides the loaded bell setting for the session; an explicit `:save` includes that override.
+
+See [examples/config.toml](examples/config.toml) for all supported fields. Download prebuilt archives from [Releases](https://github.com/Muimi272/Coffee-Clock/releases); changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development and Validation
 
@@ -80,6 +93,7 @@ GitHub Actions runs these checks on Linux, Windows, and both Intel and Apple Sil
 - `src/main.rs`: CLI arguments, terminal lifecycle, and event loop.
 - `src/app.rs`: Application state, keyboard events, and command execution.
 - `src/command.rs`: Command parsing, input editing, and completion.
+- `src/config.rs`: Validated settings and atomic configuration saves.
 - `src/model.rs`: Countdown state and duration parsing.
 - `src/pomodoro.rs`: Work and break cycle logic.
 - `src/appearance.rs`: Color parsing, fonts, and appearance settings.
