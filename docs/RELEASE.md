@@ -8,6 +8,8 @@ Coffee Clock 是一款在终端中运行的倒计时与番茄钟工具，以大�
 2. 将压缩包解压到方便使用的位置。
 3. 在解压目录打开终端，运行程序。使用预编译包不需要安装 Rust 或 Cargo；字体已内嵌，无需额外下载。
 
+发布包名称中的 `amd64` 表示 Intel / AMD 64 位架构，`arm64` 表示 ARM 64 位架构；Apple Silicon Mac 请选择 `coffee-macos-arm64`，Intel Mac 请选择 `coffee-macos-amd64`。发布包附带使用文档、项目许可证和字体许可证，建议保留完整解压目录。
+
 ### Windows
 
 建议在 Windows Terminal 中使用 PowerShell 运行：
@@ -99,6 +101,8 @@ chmod +x ./coffee
 - 长休息结束后，自动开始新一轮。
 
 所有阶段都会自动切换，也可以使用 `:stop` 和 `:continue` 暂停、继续。
+
+底部状态栏会同时显示阶段与运行状态，例如 `[Work | Running]`、`[Work | Paused]`；暂停状态不会随临时命令提示消失。
 
 ### 调整阶段时长
 

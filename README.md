@@ -26,6 +26,8 @@ Durations use positive integer values with units in hour, minute, second order: 
 cargo build --release
 ```
 
+Invalid durations are reported on stderr with exit code 2, before the terminal UI starts.
+
 ## Keyboard and Commands
 
 Press `:` to open the command bar. Press Enter to execute a command or Esc to cancel. Use the arrow keys, Home, End, Backspace, and Delete to edit input. Tab or ↓ selects the next suggestion; Shift-Tab or ↑ selects the previous one. Suggestions appear as you type. Commands and suggestions are case-insensitive. Pressing `q` in normal mode does not exit; use `:q` or `:quit`.
@@ -53,6 +55,8 @@ Command feedback appears at the right side of the title row and disappears after
 
 The default cycle consists of 25 minutes of work followed by a 5-minute short break. After four work phases, the app runs a 15-minute long break and then starts a new cycle. Transitions start automatically. Changes to phase durations take effect the next time that phase begins. Use `stop` and `continue` to pause and resume the current phase.
 
+The status bar shows both the phase and timer state, for example `[Work | Running]` or `[Work | Paused]`. The paused state stays visible after command feedback disappears, including while viewing the system clock.
+
 While the app is running, use `:pomo` to switch from a regular countdown to Pomodoro mode, or `:countdown 25m` to switch back. Replacing the active mode requires confirmation. The confirmation dialog defaults to No; use the Left/Right arrow keys or Tab to change the selection, then press Enter. You can also press `y` to confirm or `n` or Esc to cancel. The timer keeps running while confirmation is pending.
 
 ## Appearance
@@ -65,9 +69,11 @@ Bundled fonts originate from the FIGlet 2.2.5 fonts in the `cmatsuoka/figlet` re
 
 ```sh
 cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
 ```
+
+GitHub Actions runs these checks on Linux, Windows, and both Intel and Apple Silicon macOS for pull requests and pushes to `master`. Version tags run the same checks before building release archives. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development and release workflow.
 
 ## Project Structure
 

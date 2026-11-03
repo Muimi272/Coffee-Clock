@@ -24,6 +24,8 @@ cargo run -- --pomo
 cargo build --release
 ```
 
+无效时长会在终端界面启动前通过标准错误输出报告，并返回退出码 2。
+
 ## 键盘与命令
 
 应用通过 `:` 打开命令栏；输入后按 Enter 执行，按 Esc 放弃输入。方向键、Home、End、Backspace 和 Delete 可编辑命令；Tab 或 ↓ 选择下一个候选，Shift-Tab 或 ↑ 选择上一个候选。候选列表随输入显示，命令及候选匹配不区分大小写。普通模式下按 `q` 不会退出，需执行 `:q` 或 `:quit`。
@@ -51,6 +53,8 @@ cargo build --release
 
 番茄钟默认包含 25 分钟工作、5 分钟短休息；完成四个工作阶段后进行 15 分钟长休息，随后开始新一轮。各阶段结束后自动切换并开始计时。阶段时长设置仅在下次进入该阶段时生效。`stop` 与 `continue` 可暂停和恢复当前阶段。
 
+状态栏同时显示当前阶段和运行状态，例如 `[Work | Running]` 或 `[Work | Paused]`。命令反馈消失后，暂停状态仍然可见；查看系统时间时也会保留该状态。
+
 运行时可以用 `:pomo` 从普通倒计时切换到番茄钟，或用 `:countdown 25m` 返回普通倒计时；替换另一种模式时会先请求确认。确认框默认选择 No；使用左右键或 Tab 切换选择，按 Enter 提交，也可按 `y` 确认、`n` 或 Esc 取消。等待确认不会暂停当前计时。
 
 ## 外观
@@ -63,9 +67,11 @@ cargo build --release
 
 ```sh
 cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets -- -D warnings
 ```
+
+GitHub Actions 会在拉取请求和推送至 `master` 时，对 Linux、Windows、Intel macOS 和 Apple Silicon macOS 执行以上检查。版本标签在检查通过后才会构建发布包。开发与发布流程见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 
 ## 项目结构
 
