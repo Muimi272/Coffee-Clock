@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
 
 - Require Rust 1.88 and verify the minimum supported version in CI.
 - Update Ratatui and Crossterm, removing the affected `lru` 0.12 release from the dependency graph.
 - Audit the lockfile for RustSec advisories and add grouped Dependabot updates for Cargo and GitHub Actions.
+- Keep the MSRV toolchain input separate from the Rust setup action version to prevent accidental toolchain upgrades.
+- Review breaking Cargo updates individually and defer figlet-rs 1.0.0 because it introduces vulnerable ZIP dependencies and incompatible font APIs.
+- Verify the exact packaged executable version and complete documentation before publishing all four platform archives.
 
 ## 0.2.0
 

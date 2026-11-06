@@ -94,23 +94,33 @@ jobs:
 
       - name: Verify archive (Linux / macOS)
         if: matrix.os != 'windows-latest'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mkdir smoke
           tar -xzf ${{ matrix.asset_name }}.tar.gz -C smoke
-          for file in LICENSE assets/fonts/LICENSE docs/RELEASE.md docs/README.zh-CN.md examples/config.toml CHANGELOG.md; do
+          for file in README.md CONTRIBUTING.md LICENSE assets/fonts/LICENSE docs/RELEASE.md docs/README.zh-CN.md examples/config.toml CHANGELOG.md; do
             test -s "smoke/$file"
           done
-          ./smoke/coffee --version
+          expected=$(printf 'Coffee Clock - %s\nBy Muimi' "${RELEASE_TAG#v}")
+          test "$(./smoke/coffee --version)" = "$expected"
+          ./smoke/coffee --help
 
       - name: Verify archive (Windows)
         if: matrix.os == 'windows-latest'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           Expand-Archive -LiteralPath ${{ matrix.asset_name }}.zip -DestinationPath smoke
-          foreach ($file in @('LICENSE', 'assets/fonts/LICENSE', 'docs/RELEASE.md', 'docs/README.zh-CN.md', 'examples/config.toml', 'CHANGELOG.md')) {
+          foreach ($file in @('README.md', 'CONTRIBUTING.md', 'LICENSE', 'assets/fonts/LICENSE', 'docs/RELEASE.md', 'docs/README.zh-CN.md', 'examples/config.toml', 'CHANGELOG.md')) {
             if (!(Test-Path -LiteralPath "smoke/$file")) { throw "Missing archive file: $file" }
+            if ((Get-Item -LiteralPath "smoke/$file").Length -eq 0) { throw "Empty archive file: $file" }
           }
-          ./smoke/coffee.exe --version
+          $version = ./smoke/coffee.exe --version
           if ($LASTEXITCODE -ne 0) { throw 'Packaged executable failed' }
+          if (($version -join "`n") -cne "Coffee Clock - $($env:RELEASE_TAG.Substring(1))`nBy Muimi") { throw "Wrong packaged version: $version" }
+          ./smoke/coffee.exe --help
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged help failed' }
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
@@ -139,7 +149,10 @@ jobs:
 
       - name: Generate archive checksums
         working-directory: artifacts
-        run: sha256sum -- *.tar.gz *.zip > SHA256SUMS
+        run: |
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 4
+          sha256sum -- coffee-linux-amd64.tar.gz coffee-windows-amd64.zip coffee-macos-amd64.tar.gz coffee-macos-arm64.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
