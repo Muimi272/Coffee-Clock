@@ -4,7 +4,7 @@ Coffee Clock 是一个基于 Rust、Ratatui 和 Crossterm 的终端倒计时与�
 
 ## 环境与启动
 
-需要已安装 Rust 稳定版及 Cargo。克隆项目后，在项目目录运行：
+需要 Rust 1.88 或更新版本及 Cargo。克隆项目后，在项目目录运行：
 
 ```sh
 cargo run
@@ -87,6 +87,8 @@ cargo clippy --locked --all-targets -- -D warnings
 ```
 
 GitHub Actions 会在拉取请求和推送至 `master` 时，对 Linux、Windows、Intel macOS 和 Apple Silicon macOS 执行以上检查。版本标签在检查通过后才会构建发布包。开发与发布流程见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+
+CI 还会验证最低支持的 Rust 版本，并使用 RustSec 审计 `Cargo.lock`；Dependabot 会检查 Cargo 依赖和 GitHub Actions 更新。
 
 ## 项目结构
 

@@ -1,6 +1,6 @@
 # Contributing
 
-Use the stable Rust toolchain. Keep changes focused, update the English and Chinese user documentation when behavior changes, and add regression tests for bugs.
+Use Rust 1.88 or newer. Keep changes focused, update the English and Chinese user documentation when behavior changes, and add regression tests for bugs.
 
 Before submitting a pull request, run:
 
@@ -8,6 +8,7 @@ Before submitting a pull request, run:
 cargo fmt --check
 cargo test --locked --all-targets
 cargo clippy --locked --all-targets -- -D warnings
+cargo audit --deny warnings
 ```
 
 The CLI integration tests run the built executable without an interactive terminal. UI tests use Ratatui's test backend; timer tests advance elapsed time directly instead of sleeping.
@@ -24,6 +25,15 @@ The reusable workflow in `.github/workflows/ci.yml` checks formatting, Clippy, a
 | macOS Apple Silicon | `aarch64-apple-darwin` | `macos-15` |
 
 Pull requests and pushes to `master` run this workflow. The release workflow also calls it, so a failed check prevents release builds and publication.
+
+The matrix tests current stable Rust on every supported target. A dedicated job pins Rust 1.88 and
+checks that the committed lockfile still compiles on that minimum version. Another job runs
+`cargo audit --deny warnings` against `Cargo.lock`. Dependabot opens grouped weekly Cargo updates
+and monthly GitHub Actions updates; review lockfile changes and wait for CI before merging them.
+
+The project targets Rust 1.88, which was the first stable release with all language features used
+here. If a dependency raises its MSRV, update `rust-version`, the CI toolchain pins, and the user
+documentation together.
 
 ## Releases
 

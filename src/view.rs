@@ -68,7 +68,7 @@ impl CountdownView {
     }
 
     pub fn render(&self, frame: &mut Frame<'_>, app: &App) {
-        let area = frame.size();
+        let area = frame.area();
         if area.width == 0 || area.height == 0 {
             return;
         }
@@ -298,10 +298,10 @@ impl CountdownView {
                 .style(Style::default().fg(Color::White)),
             area,
         );
-        frame.set_cursor(
+        frame.set_cursor_position((
             area.x + column.saturating_sub(usize::from(scroll)).min(last) as u16,
             area.y,
-        );
+        ));
     }
 }
 
@@ -359,7 +359,7 @@ mod tests {
     fn row(terminal: &Terminal<TestBackend>, y: u16) -> String {
         let buffer = terminal.backend().buffer();
         (0..buffer.area.width)
-            .map(|x| buffer.get(x, y).symbol())
+            .map(|x| buffer.cell((x, y)).unwrap().symbol())
             .collect()
     }
 
@@ -419,11 +419,11 @@ mod tests {
         );
         assert!(row(&terminal, 6).contains('└'));
         let buffer = terminal.backend().buffer();
-        assert_eq!(buffer.get(10, 3).fg, Color::Gray);
-        assert_eq!(buffer.get(10, 4).fg, Color::Cyan);
+        assert_eq!(buffer.cell((10, 3)).unwrap().fg, Color::Gray);
+        assert_eq!(buffer.cell((10, 4)).unwrap().fg, Color::Cyan);
         for y in 1..=6 {
             for x in 8..72 {
-                assert_eq!(buffer.get(x, y).bg, Color::Reset);
+                assert_eq!(buffer.cell((x, y)).unwrap().bg, Color::Reset);
             }
         }
         app.handle_key(KeyCode::Esc.into());

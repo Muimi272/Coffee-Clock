@@ -2,14 +2,15 @@
 name = "coffee"
 version = "0.2.0"
 edition = "2024"
+rust-version = "1.88.0"
 description = "A terminal countdown and Pomodoro timer with FIGlet art"
 license = "MIT"
 repository = "https://github.com/Muimi272/Coffee-Clock"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
-ratatui = "0.26"
-crossterm = "0.27"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29"] }
+crossterm = "0.29"
 figlet-rs = "0.1.5"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 directories = "6"
