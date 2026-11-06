@@ -9,7 +9,7 @@ updates:
       # 1.0.0 breaks the font API and unconditionally pulls vulnerable zip 0.6.6.
       # Reassess later releases after the upstream dependency is fixed.
       - dependency-name: figlet-rs
-        versions: ['1.0.0']
+        versions: ['=1.0.0']
     groups:
       cargo-dependencies:
         patterns:
