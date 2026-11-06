@@ -6,7 +6,7 @@ Coffee Clock is a terminal countdown timer and Pomodoro app built with Rust, Rat
 
 ## Requirements and Setup
 
-Install the stable Rust toolchain and Cargo. From the project directory, run:
+Install Rust 1.88 or newer and Cargo. From the project directory, run:
 
 ```sh
 cargo run
@@ -87,6 +87,8 @@ cargo clippy --locked --all-targets -- -D warnings
 ```
 
 GitHub Actions runs these checks on Linux, Windows, and both Intel and Apple Silicon macOS for pull requests and pushes to `master`. Version tags run the same checks before building release archives. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development and release workflow.
+
+CI also verifies the minimum supported Rust version and audits `Cargo.lock` for RustSec advisories. Dependabot checks for Cargo and GitHub Actions updates.
 
 ## Project Structure
 
