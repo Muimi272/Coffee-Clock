@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Require Rust 1.88 and verify that minimum version in CI.
+- Require Rust 1.88 and verify the minimum supported version in CI.
 - Update Ratatui and Crossterm, removing the affected `lru` 0.12 release from the dependency graph.
 - Audit the lockfile for RustSec advisories and add grouped Dependabot updates for Cargo and GitHub Actions.
 
