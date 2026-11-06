@@ -375,9 +375,9 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "figlet-rs"
-version = "0.1.5"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4742a071cd9694fc86f9fa1a08fa3e53d40cc899d7ee532295da2d085639fbc5"
+checksum = "8a2e5432cd349c86d2c36d2322bcfdb82628826f9e436f16b48700453957a2dd"
 
 [[package]]
 name = "find-msvc-tools"
